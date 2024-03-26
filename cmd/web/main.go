@@ -1,28 +1,44 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 )
 
+// Define an application struct to hold the application-wide dependencies for the
+// web application. For now we'll only include fields for the two custom loggers, but
+// we'll add more to it as the build progresses.
+type application struct {
+	errorLog *log.Logger
+	infoLog  *log.Logger
+}
+
 func main() {
-	mux := http.NewServeMux()
+	addr := flag.String(
+		"addr",
+		":4000",
+		"HTTP network address",
+	)
+	flag.Parse()
 
-	// TODO: turn off file listing
-	// https://www.alexedwards.net/blog/disable-http-fileserver-directory-listings
-	fileServer := http.FileServer(http.Dir("./ui/static/"))
-	mux.Handle("/static/", http.StripPrefix("/static", fileServer))
+	infoLog := log.New(log.Writer(), "INFO\t", log.Ldate|log.Ltime)
+	errorLog := log.New(log.Writer(), "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
-	mux.HandleFunc("/", home)
-	mux.HandleFunc("/snippet/view", snippetView)
-	mux.HandleFunc("/snippet/create", snippetCreate)
+	// Initialize a new instance of our application struct, containing the
+	// dependencies.
+	app := &application{
+		errorLog: errorLog,
+		infoLog:  infoLog,
+	}
 
-	// Use the http.ListenAndServe() function to start a new web server. We pass in
-	// two parameters: the TCP network address to listen on (in this case ":4000")
-	// and the servemux we just created. If http.ListenAndServe() returns an error
-	// we use the log.Fatal() function to log the error message and exit. Note
-	// that any error returned by http.ListenAndServe() is always non-nil.
-	log.Println("Starting server on :4000")
-	err := http.ListenAndServe(":4000", mux)
-	log.Fatal(err)
+	srv := &http.Server{
+		Addr:     *addr,
+		ErrorLog: errorLog,
+		Handler:  app.routers(),
+	}
+
+	infoLog.Printf("Starting server on: %s", *addr)
+	err := srv.ListenAndServe()
+	errorLog.Fatal(err)
 }
